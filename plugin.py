@@ -4,9 +4,10 @@
 #
 #   This connects with a vbus device and reads the values. Vbus is a protol used by solar installation by Resol
 #
-# Known issues;
-# The volume values are in liters but the display probably is in m3.
-
+#
+# todo remove need of json live data server and connect directly to resol-vbus library
+# test if serial is working 
+ 
 """
 <plugin key="VBUS" name="VBUS solar monitor" author="Bramv" version="1.0.0" externallink="https://www.github.com">
     <description>
@@ -34,7 +35,7 @@
 </plugin>
 """
 import Domoticz
-import json
+import json 
 
 class BasePlugin:
     httpConn = None
@@ -126,12 +127,12 @@ class BasePlugin:
                         if(int(cntr_key)!="-1"):
                             Domoticz.Device(Name=cntr_name, Unit=int(cntr_key), TypeName=typeName).Create()
                 
-                Domoticz.Log("resol id:"+cntr_id+ ' key:'+str(cntr_key)+' type:'+cntr_type+' bit:'+cntr_bit+' name:'+cntr_name+' value:'+str(cntr_rawvalue))
+                #Domoticz.Log("resol id:"+cntr_id+ ' key:'+str(cntr_key)+' type:'+cntr_type+' bit:'+cntr_bit+' name:'+cntr_name+' value:'+str(cntr_rawvalue))
                 if (cntr_key in Devices) and cntr_key!=-1 and (cntr_bit=='0'): 
                     if(cntr_name=="Heat In total"):
-                        Devices[cntr_key].Update(0,"0.0;"+str(cntr_rawvalue))
+                        Devices[cntr_key].Update(0,"0.0;"+str(round(cntr_rawvalue,2)))
                     else:
-                        Devices[cntr_key].Update(0,str(cntr_rawvalue))
+                        Devices[cntr_key].Update(0,str(round(cntr_rawvalue,2)))
                 if (cntr_bit!='0') and (cntr_rawvalue !=0):
                     statusMesg = statusMesg + cntr_name
         
