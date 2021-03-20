@@ -28,7 +28,7 @@
                 <option label="Connections Only" value="16"/>
                 <option label="Connections+Python" value="18"/>
                 <option label="Connections+Queue" value="144"/>
-                <option label="All" value="-1"/>
+                <option label="All" value="1"/>
             </options>
         </param>
     </params>
@@ -48,6 +48,7 @@ class BasePlugin:
         return
 
     def onStart(self):
+        
         if Parameters["Mode6"] != "0":
             Domoticz.Debugging(int(Parameters["Mode6"]))
             DumpConfigToLog()
@@ -57,7 +58,10 @@ class BasePlugin:
         
         self.httpConn = Domoticz.Connection(Name="ResolConn", Transport="TCP/IP", Protocol="HTTP", Address=Parameters["Address"], Port=Parameters["Port"]) 
         self.httpConn.Connect()
+        Domoticz.Log("onStart connected")
 
+        #Domoticz.Debugging(62)
+        
     def onStop(self):
         Domoticz.Log("onStop - Plugin is stopping.")
 
@@ -91,13 +95,13 @@ class BasePlugin:
                    
                 if(cntr_id=="00_0010_1011_10_0100"):
                     if(cntr_name=="Heat In total"):
-                       Domoticz.Log("resol::keyfound heat in total")
+                       #Domoticz.Log("resol::keyfound heat in total")
                        cntr_key=100
                     elif(cntr_name=="Volume in total"):
-                       Domoticz.Log("resol::keyfound volume in total")
+                       #Domoticz.Log("resol::keyfound volume in total")
                        cntr_key=101
                     elif(cntr_name=="Power"):
-                       Domoticz.Log("resol::power")
+                       #Domoticz.Log("resol::power")
                        cntr_key=102
                     else:
                        cntr_key=-1
@@ -131,8 +135,12 @@ class BasePlugin:
                 if (cntr_key in Devices) and cntr_key!=-1 and (cntr_bit=='0'): 
                     if(cntr_name=="Heat In total"):
                         Devices[cntr_key].Update(0,"0.0;"+str(round(cntr_rawvalue,2)))
+                    elif(cntr_name=="Power"):
+                        Devices[cntr_key].Update(0,str(round(cntr_rawvalue*1000,2))) # convert kw to watt                    
+                    elif(cntr_name[:4]=='Flow'):
+                        Devices[cntr_key].Update(0,str(round(cntr_rawvalue/60,2))) # convert liter/hour to liter/min
                     else:
-                        Devices[cntr_key].Update(0,str(round(cntr_rawvalue,2)))
+                        Devices[cntr_key].Update(2,str(round(cntr_rawvalue,2)))
                 if (cntr_bit!='0') and (cntr_rawvalue !=0):
                     statusMesg = statusMesg + cntr_name
         
