@@ -1,4 +1,4 @@
-# VBUS plugin
+# VBUS plugin   
 #
 # Author: Bramv, 2021
 #
@@ -39,7 +39,7 @@ import json
 
 class BasePlugin:
     httpConn = None
-    runAgain = 6
+    runAgain = 0          # start immidiate. next time  use 6
     disconnectCount = 0
     sProtocol = "HTTP"
     previousDate = 0
@@ -48,20 +48,18 @@ class BasePlugin:
         return
 
     def onStart(self):
-        
+        Domoticz.Log("onStart.")
+
         if Parameters["Mode6"] != "0":
             Domoticz.Debugging(int(Parameters["Mode6"]))
             DumpConfigToLog()
         Domoticz.Log("mode 6:" + Parameters["Mode6"])
         Domoticz.Log("Name="+self.sProtocol+" Test" +", Transport=""TCP/IP"", Protocol="+str(self.sProtocol)+", Address="+Parameters["Address"]) 
-        
-        
+                
         self.httpConn = Domoticz.Connection(Name="ResolConn", Transport="TCP/IP", Protocol="HTTP", Address=Parameters["Address"], Port=Parameters["Port"]) 
         self.httpConn.Connect()
         Domoticz.Log("onStart connected")
 
-        #Domoticz.Debugging(62)
-        
     def onStop(self):
         Domoticz.Log("onStop - Plugin is stopping.")
 
@@ -82,6 +80,8 @@ class BasePlugin:
             
     def processResponse(self,Response):
         statusMesg =''
+        HeatInTotal=-1
+        Power=-1
         for counter in Response:
             if (counter['id']!="00_0010_1001_10_0100_000_4_0"):
                 cntr_id= counter['id'][:20]
@@ -100,8 +100,8 @@ class BasePlugin:
                     elif(cntr_name=="Volume in total"):
                        #Domoticz.Log("resol::keyfound volume in total")
                        cntr_key=101
-                    elif(cntr_name=="Power"):
-                       #Domoticz.Log("resol::power")
+                    elif(cntr_name=="Power"):     # power and heat are also combined in total heat
+                       Domoticz.Log("resol::power")
                        cntr_key=102
                     else:
                        cntr_key=-1
@@ -116,33 +116,41 @@ class BasePlugin:
                     if(cntr_name[:4]=='Pump'):
                        typeName="Switch"
                     if(cntr_name[:3]=='PWM'):
-                       typeName="Dimmer"
+                       typeName="Percentage"
                     if(cntr_name=='Error mask' or cntr_name=='Warning mask'):
                        typeName='Text'
                        cntr_name='VBUS status'
                     if(cntr_name=="Heat In total"):
                        typeName='kWh'
                     if(cntr_name=="Volume in total"):
-                       typeName="Counter Incremental"
-                       Domoticz.Device(Name=cntr_name, Unit=int(cntr_key), Type=243,Subtype=28,Switchtype=2).Create()
+                       typeName="counter"
+                       Domoticz.Device(Name=cntr_name, Unit=int(cntr_key), Type=113,Subtype=0,Switchtype=2).Create()
                     elif(cntr_name=="Power"):
                        Domoticz.Device(Name=cntr_name, Unit=int(cntr_key), Type=248,Subtype=1, Image=0).Create()
                     else:
                         if(int(cntr_key)!="-1"):
                             Domoticz.Device(Name=cntr_name, Unit=int(cntr_key), TypeName=typeName).Create()
                 
-                #Domoticz.Log("resol id:"+cntr_id+ ' key:'+str(cntr_key)+' type:'+cntr_type+' bit:'+cntr_bit+' name:'+cntr_name+' value:'+str(cntr_rawvalue))
                 if (cntr_key in Devices) and cntr_key!=-1 and (cntr_bit=='0'): 
                     if(cntr_name=="Heat In total"):
-                        Devices[cntr_key].Update(0,"0.0;"+str(round(cntr_rawvalue,2)))
+                        HeatInTotal=round(cntr_rawvalue,2)
                     elif(cntr_name=="Power"):
-                        Devices[cntr_key].Update(0,str(round(cntr_rawvalue*1000,2))) # convert kw to watt                    
+                        Power=round(cntr_rawvalue*1000,2) # convert kw to watt  
+                        Domoticz.Log("I've got the Power" + str(Power))                        
                     elif(cntr_name[:4]=='Flow'):
                         Devices[cntr_key].Update(0,str(round(cntr_rawvalue/60,2))) # convert liter/hour to liter/min
+                    elif(cntr_name[:6]=='Volume'):
+                        Devices[cntr_key].Update(0,str(cntr_rawvalue)) # no nvalue needed
                     else:
                         Devices[cntr_key].Update(2,str(round(cntr_rawvalue,2)))
                 if (cntr_bit!='0') and (cntr_rawvalue !=0):
                     statusMesg = statusMesg + cntr_name
+        if(Power!=-1) or (HeatInTotal!=-1) :            
+            Domoticz.Log("Saving heatintotal" + str(Power)+" "+str(HeatInTotal))
+            Devices[102].Update(0,str(max(Power,0)))
+            Devices[100].Update(0,str(Power)+";"+str(max(HeatInTotal,0)))
+        else:
+            Domoticz.Log("no heatintotal" + str(Power)+" "+str(HeatInTotal))
         
         if(statusMesg!=''):
             Devices[103].Update(0,statusMesg)   
@@ -196,6 +204,7 @@ class BasePlugin:
 
     def onHeartbeat(self):
         #Domoticz.Trace(True)
+        Domoticz.Log("onHeartbeat:"+str(self.runAgain))
         if (self.httpConn != None and (self.httpConn.Connecting() or self.httpConn.Connected())):
             Domoticz.Debug("onHeartbeat called, Connection is alive.")
         else:
