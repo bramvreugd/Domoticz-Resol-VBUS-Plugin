@@ -28,3 +28,6 @@ cd domoticz/plugins/resol-vbus
 git pull
 ```
 2. Restart domoticz
+
+
+Version 1.1 you may need to remove device "volume in total" or change it's type from 243 to 113 and subtype from 28 to 0
