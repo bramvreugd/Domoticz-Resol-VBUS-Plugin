@@ -1,4 +1,4 @@
-# VBUS plugin   
+# VBUS plugin
 #
 # Author: Bramv, 2021
 #
@@ -6,13 +6,13 @@
 #
 #
 # todo remove need of json live data server and connect directly to resol-vbus library
-# test if serial is working 
- 
+# test if serial is working this is only tested over tcp/ip
+
 """
-<plugin key="VBUS" name="VBUS solar monitor" author="Bramv" version="1.0.0" externallink="https://www.github.com">
+<plugin key="VBUS" name="VBUS solar monitor" author="Bramv" version="1.1.0" externallink="https://www.github.com">
     <description>
         <h2>VBUS solar connection Resol</h2><br/>
-        Will hit the supplied URL every 5 heartbeats in the request protocol.  Redirects are handled.
+        Will hit the supplied URL every 2 heartbeats in the request protocol.  Redirects are handled.
         You need VBUS and the example "json-live-data-server" running.
         https://github.com/danielwippermann/resol-vbus
     </description>
@@ -35,7 +35,7 @@
 </plugin>
 """
 import Domoticz
-import json 
+import json
 
 class BasePlugin:
     httpConn = None
@@ -43,7 +43,7 @@ class BasePlugin:
     disconnectCount = 0
     sProtocol = "HTTP"
     previousDate = 0
-    
+
     def __init__(self):
         return
 
@@ -53,10 +53,8 @@ class BasePlugin:
         if Parameters["Mode6"] != "0":
             Domoticz.Debugging(int(Parameters["Mode6"]))
             DumpConfigToLog()
-        Domoticz.Log("mode 6:" + Parameters["Mode6"])
-        Domoticz.Log("Name="+self.sProtocol+" Test" +", Transport=""TCP/IP"", Protocol="+str(self.sProtocol)+", Address="+Parameters["Address"]) 
-                
-        self.httpConn = Domoticz.Connection(Name="ResolConn", Transport="TCP/IP", Protocol="HTTP", Address=Parameters["Address"], Port=Parameters["Port"]) 
+
+        self.httpConn = Domoticz.Connection(Name="ResolConn", Transport="TCP/IP", Protocol="HTTP", Address=Parameters["Address"], Port=Parameters["Port"])
         self.httpConn.Connect()
         Domoticz.Log("onStart connected")
 
@@ -76,12 +74,20 @@ class BasePlugin:
                        }
             Connection.Send(sendData)
         else:
-            Domoticz.Log("Failed to connect ("+str(Status)+") to: "+Parameters["Address"]+":"+Parameters["Mode1"]+" with error: "+Description)
-            
+            Domoticz.Error("Failed to connect ("+str(Status)+") to: "+Parameters["Address"]+":"+Parameters["Mode1"]+" with error: "+Description)
+
+    def UpdateDevice(self,Unit, nValue, sValue):
+       # Make sure that the Domoticz device still exists (they can be deleted) before updating it
+       if (Unit in Devices):
+           if (Devices[Unit].nValue != nValue) or (Devices[Unit].sValue != sValue):
+               Devices[Unit].Update(nValue, str(sValue))
+       return
+
     def processResponse(self,Response):
         statusMesg =''
         HeatInTotal=-1
         Power=-1
+
         for counter in Response:
             if (counter['id']!="00_0010_1001_10_0100_000_4_0"):
                 cntr_id= counter['id'][:20]
@@ -92,27 +98,24 @@ class BasePlugin:
                 cntr_rawvalue=counter['rawValue']
                 if(cntr_name[:5]=="Error" or cntr_name[:7]=="Warning"):
                     cntr_key=103       # place error en warning in same device
-                   
+
                 if(cntr_id=="00_0010_1011_10_0100"):
                     if(cntr_name=="Heat In total"):
-                       #Domoticz.Log("resol::keyfound heat in total")
                        cntr_key=100
                     elif(cntr_name=="Volume in total"):
-                       #Domoticz.Log("resol::keyfound volume in total")
                        cntr_key=101
                     elif(cntr_name=="Power"):     # power and heat are also combined in total heat
-                       Domoticz.Log("resol::power")
                        cntr_key=102
                     else:
                        cntr_key=-1
-                       
+
                 if not (cntr_key in Devices) and (cntr_bit=='0') and cntr_key!=-1:
                     if(cntr_name[:4]=='Temp'):
                        typeName="Temperature"
                     if(cntr_name[:4]=='Flow'):
                        typeName="Waterflow"
                     if(cntr_name[:4]=='Pres'):
-                       typeName="Pressure"              
+                       typeName="Pressure"
                     if(cntr_name[:4]=='Pump'):
                        typeName="Switch"
                     if(cntr_name[:3]=='PWM'):
@@ -130,54 +133,50 @@ class BasePlugin:
                     else:
                         if(int(cntr_key)!="-1"):
                             Domoticz.Device(Name=cntr_name, Unit=int(cntr_key), TypeName=typeName).Create()
-                
-                if (cntr_key in Devices) and cntr_key!=-1 and (cntr_bit=='0'): 
+
+                if (cntr_key in Devices) and cntr_key!=-1 and (cntr_bit=='0'):
                     if(cntr_name=="Heat In total"):
                         HeatInTotal=round(cntr_rawvalue,2)
                     elif(cntr_name=="Power"):
-                        Power=round(cntr_rawvalue*1000,2) # convert kw to watt  
-                        Domoticz.Log("I've got the Power" + str(Power))                        
+                        Power=round(cntr_rawvalue*1000,2) # convert kw to watt
                     elif(cntr_name[:4]=='Flow'):
-                        Devices[cntr_key].Update(0,str(round(cntr_rawvalue/60,2))) # convert liter/hour to liter/min
+                        self.UpdateDevice(cntr_key,0,str(round(cntr_rawvalue/60,2))) # convert liter/hour to liter/min
                     elif(cntr_name[:6]=='Volume'):
-                        Devices[cntr_key].Update(0,str(cntr_rawvalue)) # no nvalue needed
+                        self.UpdateDevice(cntr_key,0,str(cntr_rawvalue)) # no nvalue needed
                     else:
-                        Devices[cntr_key].Update(2,str(round(cntr_rawvalue,2)))
+                        self.UpdateDevice(cntr_key,2,str(round(cntr_rawvalue,2)))
                 if (cntr_bit!='0') and (cntr_rawvalue !=0):
                     statusMesg = statusMesg + cntr_name
-        if(Power!=-1) or (HeatInTotal!=-1) :            
-            Domoticz.Log("Saving heatintotal" + str(Power)+" "+str(HeatInTotal))
-            Devices[102].Update(0,str(max(Power,0)))
-            Devices[100].Update(0,str(Power)+";"+str(max(HeatInTotal,0)))
-        else:
-            Domoticz.Log("no heatintotal" + str(Power)+" "+str(HeatInTotal))
-        
+        if(Power!=-1) or (HeatInTotal!=-1) :
+            self.UpdateDevice(102,0,str(max(Power,0)))
+            self.UpdateDevice(100,0,str(Power)+";"+str(max(HeatInTotal,0)))
+
         if(statusMesg!=''):
-            Devices[103].Update(0,statusMesg)   
-    
+            self.UpdateDevice(103,0,statusMesg)
+
     def onMessage(self, Connection, Data):
         #DumpHTTPResponseToLog(Data)
-        
+
         strData = Data["Data"].decode("utf-8", "ignore")
         Status = int(Data["Status"])
-        #LogMessage("data:"+strData)
 
         if (Status == 200):
             if ((self.disconnectCount & 1) == 1):
-                Domoticz.Log("Good Response received from vbus, Disconnecting.")
-                self.httpConn.Disconnect()                
+                Domoticz.Debug("Good Response received from vbus, Disconnecting.")
+                self.httpConn.Disconnect()
             else:
-                Domoticz.Log("Good Response received from vbus, Dropping connection.")
+                Domoticz.Debug("Good Response received from vbus, Dropping connection.")
                 self.httpConn = None
             self.disconnectCount = self.disconnectCount + 1
             Response = json.loads( Data["Data"].decode("utf-8", "ignore") )
 
-            #Domoticz.Log("resol:"+str(type(Response)))
             resolDate=Response[0]['rawValue']
+
             if(resolDate!=self.previousDate):
+                # date is diff so procees the page
                 self.processResponse(Response)
                 self.previousDate=resolDate
-                
+
         elif (Status == 302):
             Domoticz.Log("VBUS returned a Page Moved Error.")
             sendData = { 'Verb' : 'GET',
@@ -203,8 +202,7 @@ class BasePlugin:
         Domoticz.Log("onDisconnect called for connection to: "+Connection.Address+":"+Connection.Port)
 
     def onHeartbeat(self):
-        #Domoticz.Trace(True)
-        Domoticz.Log("onHeartbeat:"+str(self.runAgain))
+        Domoticz.Debug("onHeartbeat:"+str(self.runAgain))
         if (self.httpConn != None and (self.httpConn.Connecting() or self.httpConn.Connected())):
             Domoticz.Debug("onHeartbeat called, Connection is alive.")
         else:
@@ -213,10 +211,9 @@ class BasePlugin:
                 if (self.httpConn == None):
                     self.httpConn = Domoticz.Connection(Name=self.sProtocol+" Test", Transport="TCP/IP", Protocol=self.sProtocol, Address=Parameters["Address"], Port=Parameters["Port"])
                 self.httpConn.Connect()
-                self.runAgain = 6
+                self.runAgain = 2
             else:
                 Domoticz.Debug("onHeartbeat called, run again in "+str(self.runAgain)+" heartbeats.")
-        #Domoticz.Trace(False)
 
 global _plugin
 _plugin = BasePlugin()
