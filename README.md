@@ -31,6 +31,6 @@ git pull
 2. Restart domoticz or disable and enable the hardware plugin
 
 
-Version 
-1.1 you may need to remove device "volume in total" or change it's type from 243 to 113 and subtype from 28 to 0
+Version <br>
+1.1 you may need to remove device "volume in total" or change it's type from 243 to 113 and subtype from 28 to 0<br>
 1.2 Added pump and pressure. Fixed exception about extra data.
