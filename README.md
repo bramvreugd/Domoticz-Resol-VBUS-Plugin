@@ -5,7 +5,8 @@ Resol VBUS plugin for Domoticz
 * Setup and run resul-vbus library (https://github.com/danielwippermann/resol-vbus).
 * Start  the "json-live-data-server" example
 * Make sure that your Domoticz supports Python plugins (https://www.domoticz.com/wiki/Using_Python_plugins)
-* Make sure http://127.0.0.1:3333/api/v1/live-data/ return a list of values in your browser 
+* Make sure http://127.0.0.1:3333/api/v1/live-data/ return a list of values in your browser
+* 127.0.0.1 can be different if you browse from another computer.
 
 ## Installation
 
@@ -27,7 +28,9 @@ Once plugin receive device list from resol-vbus library it will create appropria
 cd domoticz/plugins/resol-vbus
 git pull
 ```
-2. Restart domoticz
+2. Restart domoticz or disable and enable the hardware plugin
 
 
-Version 1.1 you may need to remove device "volume in total" or change it's type from 243 to 113 and subtype from 28 to 0
+Version 
+1.1 you may need to remove device "volume in total" or change it's type from 243 to 113 and subtype from 28 to 0
+1.2 Added pump and pressure. Fixed exception about extra data.
