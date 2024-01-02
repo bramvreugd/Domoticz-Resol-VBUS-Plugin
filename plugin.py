@@ -36,6 +36,8 @@
 """
 import Domoticz
 import json
+import datetime
+from datetime import datetime
 
 class BasePlugin:
     httpConn = None
@@ -65,7 +67,7 @@ class BasePlugin:
         if (Status == 0):
             Domoticz.Debug("Connected successfully.")
             sendData = { 'Verb' : 'GET',
-                         'URL'  :  '/api/v1/live-data', 
+                         'URL'  :  '/api/v1/live-data',
                          'Headers' : { 'Content-Type': 'text/xml; charset=utf-8', \
                                        'Connection': 'keep-alive', \
                                        'Accept': 'Content-Type: text/html; charset=UTF-8', \
@@ -73,22 +75,35 @@ class BasePlugin:
                                        'User-Agent':'Domoticz/1.0' }
                        }
             Connection.Send(sendData)
+            #Connection.Send(sendData)
         else:
             Domoticz.Error("Failed to connect ("+str(Status)+") to: "+Parameters["Address"]+":"+Parameters["Mode1"]+" with error: "+Description)
 
     def UpdateDevice(self,Unit, nValue, sValue):
        # Make sure that the Domoticz device still exists (they can be deleted) before updating it
        if (Unit in Devices):
-           if (Devices[Unit].nValue != nValue) or (Devices[Unit].sValue != sValue):
-               Devices[Unit].Update(nValue, str(sValue))
+           if(Devices[Unit].LastUpdate):
+               lastupdate = datetime.strptime(Devices[Unit].LastUpdate, '%Y-%m-%d %H:%M:%S')
+
+               #lastupdate = datetime.datetime.fromtimestamp(time.mktime(time.strptime(Devices[Unit].lastUpdate, '%Y-%m-%d %H:%M:%S')))
+               now= datetime.now()
+               diff=now-lastupdate
+               if (Devices[Unit].nValue != nValue) or (Devices[Unit].sValue != sValue) or (diff.total_seconds() >300):
+                   Devices[Unit].Update(nValue, str(sValue))
+           else:
+              Devices[Unit].Update(nValue, str(sValue))
        return
 
     def processResponse(self,Response):
+        #Domoticz.Log("resol response:" + str(Response))
+
         statusMesg =''
         HeatInTotal=-1
         Power=-1
 
         for counter in Response:
+            #Domoticz.Log("resol counter:" + str(counter))
+
             if (counter['id']!="00_0010_1001_10_0100_000_4_0"):
                 cntr_id= counter['id'][:20]
                 cntr_key=int(counter['id'][21:24])
@@ -143,8 +158,24 @@ class BasePlugin:
                         self.UpdateDevice(cntr_key,0,str(round(cntr_rawvalue/60,2))) # convert liter/hour to liter/min
                     elif(cntr_name[:6]=='Volume'):
                         self.UpdateDevice(cntr_key,0,str(cntr_rawvalue)) # no nvalue needed
+                    elif(cntr_name[:4]=='Temp'):
+                        self.UpdateDevice(cntr_key,0,str(round(cntr_rawvalue,2))) # temperatures can be adjusted
+                        #  +Devices[cntr_key].Adjustment,2)    this should be implemented but does not work reuires domoticzex platform
+                    elif(cntr_name[:4]=='Pres'):
+                        self.UpdateDevice(cntr_key,0,str(round(cntr_rawvalue,2))) # pressure
+                    elif(cntr_name[:4]=='Pump'):
+                        if(cntr_rawvalue==100):
+                           self.UpdateDevice(cntr_key,1,"100")
+                        elif(cntr_rawvalue==0):
+                           self.UpdateDevice(cntr_key,0,"0")
+                        else:
+                           self.UpdateDevice(cntr_key,2,str(round(cntr_rawvalue,2)))
                     else:
-                        self.UpdateDevice(cntr_key,2,str(round(cntr_rawvalue,2)))
+                        Domoticz.Log("resol update "+ str(cntr_key))
+                        Domoticz.Log("val:" + str(cntr_rawvalue))
+                        Domoticz.Log(str(round(cntr_rawvalue,2)))
+                        self.UpdateDevice(cntr_key,cntr_rawvalue,str(round(cntr_rawvalue,2)))
+
                 if (cntr_bit!='0') and (cntr_rawvalue !=0):
                     statusMesg = statusMesg + cntr_name
         if(Power!=-1) or (HeatInTotal!=-1) :
@@ -157,25 +188,29 @@ class BasePlugin:
     def onMessage(self, Connection, Data):
         #DumpHTTPResponseToLog(Data)
 
-        strData = Data["Data"].decode("utf-8", "ignore")
+        strData = Data["Data"].decode("utf-8", "ignore").strip()
         Status = int(Data["Status"])
 
         if (Status == 200):
             if ((self.disconnectCount & 1) == 1):
                 Domoticz.Debug("Good Response received from vbus, Disconnecting.")
-                self.httpConn.Disconnect()
+                if(self.httpConn!=None):
+                   self.httpConn.Disconnect()
             else:
                 Domoticz.Debug("Good Response received from vbus, Dropping connection.")
                 self.httpConn = None
             self.disconnectCount = self.disconnectCount + 1
-            Response = json.loads( Data["Data"].decode("utf-8", "ignore") )
-
+            Response = json.loads( strData )
             resolDate=Response[0]['rawValue']
+            #Domoticz.Log("Resol VBUS returned response:"+str(Response)+'date:'+str(resolDate)+" "+str(self.previousDate))
 
             if(resolDate!=self.previousDate):
                 # date is diff so procees the page
-                self.processResponse(Response)
                 self.previousDate=resolDate
+
+                #Domoticz.Log("Resol date new")
+                self.processResponse(Response)
+                #Domoticz.Log("Resol date new done processresponse")
 
         elif (Status == 302):
             Domoticz.Log("VBUS returned a Page Moved Error.")
@@ -211,7 +246,7 @@ class BasePlugin:
                 if (self.httpConn == None):
                     self.httpConn = Domoticz.Connection(Name=self.sProtocol+" Test", Transport="TCP/IP", Protocol=self.sProtocol, Address=Parameters["Address"], Port=Parameters["Port"])
                 self.httpConn.Connect()
-                self.runAgain = 2
+                self.runAgain = 1
             else:
                 Domoticz.Debug("onHeartbeat called, run again in "+str(self.runAgain)+" heartbeats.")
 
