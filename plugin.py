@@ -9,7 +9,7 @@
 # test if serial is working this is only tested over tcp/ip
 
 """
-<plugin key="VBUS" name="VBUS solar monitor" author="Bramv" version="1.1.0" externallink="https://www.github.com">
+<plugin key="VBUS" name="VBUS solar monitor" author="Bramv" version="1.2.0" externallink="https://www.github.com">
     <description>
         <h2>VBUS solar connection Resol</h2><br/>
         Will hit the supplied URL every 2 heartbeats in the request protocol.  Redirects are handled.
